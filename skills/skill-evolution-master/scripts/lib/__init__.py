@@ -8,11 +8,24 @@ SKILL_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _load_dotenv():
-    """Minimal .env loader: walk up from cwd to find .env, parse KEY=VALUE lines."""
-    for d in [Path.cwd(), *Path.cwd().parents]:
-        env_file = d / ".env"
-        if env_file.is_file():
+    """Load .env from trusted paths only: SKILL_ROOT and current working directory.
+
+    SECURITY: Only loads from predefined paths to prevent path traversal attacks.
+    Does NOT walk up the directory tree from cwd.
+    """
+    # Trusted paths: skill root directory and current working directory
+    trusted_paths = [SKILL_ROOT, Path.cwd()]
+
+    for base_path in trusted_paths:
+        env_file = base_path / ".env"
+        if env_file.is_file() and env_file.exists():
             try:
+                # Verify the file is within the trusted path (defense in depth)
+                env_file_resolved = env_file.resolve()
+                base_path_resolved = base_path.resolve()
+                if not env_file_resolved.is_relative_to(base_path_resolved):
+                    continue
+
                 for line in env_file.read_text().splitlines():
                     line = line.strip()
                     if not line or line.startswith("#") or "=" not in line:
@@ -53,7 +66,10 @@ def save_publisher_key(key):
     try:
         key_file.write_text(key + "\n")
     except OSError as e:
-        print(f"WARNING: could not save key to {key_file}: {e}", file=__import__('sys').stderr)
+        print(
+            f"WARNING: could not save key to {key_file}: {e}",
+            file=__import__("sys").stderr,
+        )
     os.environ["PUBLISHER_KEY"] = key
 
 
